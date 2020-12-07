@@ -31,7 +31,7 @@ using OnMessageCb =
 using OnConnection = std::function<void(TcpConnectionPtr &connptr)>;
 
 class noncopyable {
-public:
+ public:
   noncopyable() = default;
   ~noncopyable() = default;
   noncopyable(const noncopyable &) = delete;
@@ -39,7 +39,7 @@ public:
 };
 
 class Event {
-public:
+ public:
   Event(EventLoop *loop, int sockfd) : loop_(loop), sockfd_(sockfd) {}
 
   //返回管理的套接字
@@ -55,34 +55,33 @@ public:
   //设置读(接受连接)回调
   void setWriteCallback(const WakeToWriteCb &cb) { wakeupWritecb_ = cb; }
 
-  //设置可以读事件。
   void add(uint32_t events);
-  //设置写事件
   void modifly(uint32_t events);
+  void del(uint32_t events);
 
   //调用回调 ： 读(接受连接） 或 写
   void handleCallback() {
     if (revent_ == EPOLLIN) {
-      waketoListenOrReadCb_(); //接受连接或读取数据。
+      waketoListenOrReadCb_();  //接受连接或读取数据。
     } else if (revent_ == EPOLLOUT) {
-      wakeupWritecb_(); //设置写事件。
+      wakeupWritecb_();  //设置写事件。
     }
   }
 
   //返回注册的事件
   uint32_t getEvents() const { return event_; }
 
-private:
+ private:
   EventLoop *loop_;
   int sockfd_;
   uint32_t event_;
   uint32_t revent_;
-  WakeToListenOrReadCb waketoListenOrReadCb_; //读（接受连接）回调指针
+  WakeToListenOrReadCb waketoListenOrReadCb_;  //读（接受连接）回调指针
   WakeToWriteCb wakeupWritecb_;
 };
 
 class Epoll {
-public:
+ public:
   Epoll() : epfd_(epoll_create(1024)) {}
 
   ~Epoll() { close(epfd_); }
@@ -107,6 +106,13 @@ public:
     epoll_ctl(epfd_, EPOLL_CTL_MOD, ev->getSockfd(), &epev);
   }
 
+  void del(Event *ev) {
+    struct epoll_event epev;
+    epev.data.ptr = ev;
+    epev.events = ev->getEvents();
+    epoll_ctl(epfd_, EPOLL_CTL_DEL, ev->getSockfd(), &epev);
+  }
+
   void add(Event *ev) {
     struct epoll_event epev;
     epev.data.ptr = ev;
@@ -114,13 +120,13 @@ public:
     epoll_ctl(epfd_, EPOLL_CTL_ADD, ev->getSockfd(), &epev);
   }
 
-private:
+ private:
   int epfd_;
   struct epoll_event eventNum[500];
 };
 
 class EventLoop {
-public:
+ public:
   void loop() {
     while (1) {
       std::vector<Event *> evlst_ = epoll_.poll();
@@ -132,8 +138,9 @@ public:
 
   void add(Event *ev) { epoll_.add(ev); }
   void modifly(Event *ev) { epoll_.modifly(ev); }
+  void del(Event *ev) { epoll_.del(ev); }
 
-private:
+ private:
   Epoll epoll_;
 };
 
@@ -155,4 +162,9 @@ inline void Event::add(uint32_t events) {
 inline void Event::modifly(uint32_t events) {
   event_ = events;
   loop_->modifly(this);
+}
+
+inline void Event::del(uint32_t events) {
+  event_ = events;
+  loop_->del(this);
 }

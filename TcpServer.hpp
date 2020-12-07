@@ -1,12 +1,12 @@
 #pragma once
 
+#include <string>
+
 #include "Acceptor.hpp"
 #include "TcpConnection.hpp"
 
-#include <string>
-
 class TcpServer : noncopyable {
-public:
+ public:
   TcpServer(EventLoop *loop, uint16_t port)
       : loop_(loop),
         acceptor_(loop_, port, std::bind(&TcpServer::newConnection, this, _1)) {
@@ -17,14 +17,14 @@ public:
     mgsCb_ = mgsCb;
   }
 
-private:
+ private:
   void newConnection(int connfd) {
     auto connptr = std::make_shared<TcpConnection>(loop_, connfd, mgsCb_);
     userMap_.insert({connfd, connptr});
     connCb_(connptr);
   }
 
-private:
+ private:
   EventLoop *loop_;
   Acceptor acceptor_;
   std::map<int, std::shared_ptr<TcpConnection>> userMap_;

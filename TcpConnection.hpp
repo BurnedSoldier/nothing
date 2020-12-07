@@ -4,7 +4,7 @@
 #include "EventLoop.hpp"
 
 class TcpConnection : public std::enable_shared_from_this<TcpConnection> {
-public:
+ public:
   TcpConnection(EventLoop *loop, int sockfd, const OnMessageCb &mgsCb)
       : loop_(loop), connEvent_(loop_, sockfd), onMessageCb_(mgsCb) {
     connEvent_.setReadCallback(std::bind(&TcpConnection::wakeupRead, this));
@@ -17,14 +17,20 @@ public:
     connEvent_.modifly(EPOLLOUT);
   }
 
-private:
+ private:
   void wakeupRead() {
     char buf[10000];
     size_t sz = read(connEvent_.getSockfd(), buf, 10000);
-    readBuffer_.push(buf, sz);
+    if (sz == 0) {
+		shutdown(connEvent_.getSockfd(), SHUT_WR);
+		connEvent_.del(EPOLLIN);
 
-    auto connptr = shared_from_this();
-    onMessageCb_(connptr, readBuffer_);
+    } else {
+      readBuffer_.push(buf, sz);
+
+      auto connptr = shared_from_this();
+      onMessageCb_(connptr, readBuffer_);
+    }
   }
 
   void wakeupWrite() {
@@ -32,11 +38,10 @@ private:
     char *buf = writeBuffer_.getMgs(&len);
     size_t n = write(connEvent_.getSockfd(), buf, len);
     writeBuffer_.releaseBytes(n);
-    //取消写事件。
     connEvent_.modifly(EPOLLIN);
   }
 
-private:
+ private:
   EventLoop *loop_;
   Event connEvent_;
   OnMessageCb onMessageCb_;
